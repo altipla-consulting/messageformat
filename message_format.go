@@ -81,11 +81,13 @@ func (pcase pluralCaseType) String() string {
 const (
 	pluralCaseOne = pluralCaseType(iota)
 	pluralCaseOther
+	pluralCaseExact
 )
 
 type pluralCase struct {
-	caseType pluralCaseType
-	blocks   []messageBlock
+	caseType   pluralCaseType
+	blocks     []messageBlock
+	exactValue int64
 }
 
 type pluralBlock struct {
@@ -99,13 +101,20 @@ func (block *pluralBlock) format(lang string, params []interface{}) (string, err
 	}
 
 	pcase := getPluralCase(lang, params[block.number].(int64))
+	var bestMatch *pluralCase
 	for _, c := range block.cases {
-		if c.caseType != pcase {
-			continue
+		if c.caseType == pluralCaseExact && c.exactValue == block.number {
+			bestMatch = c
+			break
 		}
+		if c.caseType == pcase {
+			bestMatch = c
+		}
+	}
 
-		parts := make([]string, len(c.blocks))
-		for i, b := range c.blocks {
+	if bestMatch != nil {
+		parts := make([]string, len(bestMatch.blocks))
+		for i, b := range bestMatch.blocks {
 			res, err := b.format(lang, params)
 			if err != nil {
 				return "", errors.Trace(err)
@@ -290,12 +299,20 @@ func lexPlural(p *parser) (stateFn, error) {
 		c := new(pluralCase)
 
 		pcase := p.emit()
-		switch pcase {
-		case "one":
+		switch {
+		case pcase == "one":
 			c.caseType = pluralCaseOne
 
-		case "other":
+		case pcase == "other":
 			c.caseType = pluralCaseOther
+
+		case pcase[0] == '=':
+			c.caseType = pluralCaseExact
+			n, err := strconv.ParseInt(pcase[1:], 10, 64)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+			c.exactValue = n
 
 		default:
 			return nil, errors.Errorf("unknown plural case: %s", pcase)
