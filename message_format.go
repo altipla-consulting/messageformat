@@ -100,10 +100,18 @@ func (block *pluralBlock) format(lang string, params []interface{}) (string, err
 		return "", errors.Errorf("parameter not specified: %d", block.number)
 	}
 
-	number, ok := params[block.number].(int64)
-	if !ok {
-		number = int64(params[block.number].(int32))
+	var number int64
+	switch v := params[block.number].(type) {
+	case int64:
+		number = v
+
+	case int32:
+		number = int64(v)
+
+	case int:
+		number = int64(v)
 	}
+
 	pcase := getPluralCase(lang, number)
 	var bestMatch *pluralCase
 	for _, c := range block.cases {
